@@ -1,0 +1,4 @@
+.DS_Store
+sudoku/puzzles/logs
+sudoku/expert/logs
+*.txt
