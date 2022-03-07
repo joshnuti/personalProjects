@@ -39,41 +39,45 @@ class piece {
     }
 
     [object[]] getOptions() {
-        if ($this.team -eq 0 -or $this.king) { $down = $true }
-        else { $down = $false }
+        # if ($this.team -eq 0 -or $this.king) { $down = $true }
+        # else { $down = $false }
         
-        if ($this.team -eq 1 -or $this.king) { $up = $true }
-        else { $up = $false }
+        # if ($this.team -eq 1 -or $this.king) { $up = $true }
+        # else { $up = $false }
 
         $options = @()
 
+        $options += $this.square.getJumps($this)
+
         # if direction has piece & direction piece team != this team & not direction.direction piece & can move up/down
-        if ($this.square.topLeft.piece -and $this.square.topLeft.piece.team -ne $this.team -and !$this.square.topLeft.topLeft.piece -and $up) {
-            $options += [PSCustomObject]@{square = $this.square.topLeft.topLeft; piece = $this.square.topLeft.piece }
-        }
-        if ($this.square.topRight.piece -and $this.square.topRight.piece.team -ne $this.team -and !$this.square.topRight.topRight.piece -and $up) {
-            $options += [PSCustomObject]@{square = $this.square.topRight.topRight; piece = $this.square.topRight.piece }
-        }
-        if ($this.square.bottomLeft.piece -and $this.square.bottomLeft.piece.team -ne $this.team -and !$this.square.bottomLeft.bottomLeft.piece -and $down) {
-            $options += [PSCustomObject]@{square = $this.square.bottomLeft.bottomLeft; piece = $this.square.bottomLeft.piece } 
-        }
-        if ($this.square.bottomRight.piece -and $this.square.bottomRight.piece.team -ne $this.team -and !$this.square.bottomRight.bottomRight.piece -and $down) {
-            $options += [PSCustomObject]@{square = $this.square.bottomRight.bottomRight; piece = $this.square.bottomRight.piece }
-        }
+        # if ($this.square.topLeft.piece -and $this.square.topLeft.piece.team -ne $this.team -and !$this.square.topLeft.topLeft.piece -and $up) {
+        #     $options += [PSCustomObject]@{square = $this.square.topLeft.topLeft; piece = $this.square.topLeft.piece }
+        # }
+        # if ($this.square.topRight.piece -and $this.square.topRight.piece.team -ne $this.team -and !$this.square.topRight.topRight.piece -and $up) {
+        #     $options += [PSCustomObject]@{square = $this.square.topRight.topRight; piece = $this.square.topRight.piece }
+        # }
+        # if ($this.square.bottomLeft.piece -and $this.square.bottomLeft.piece.team -ne $this.team -and !$this.square.bottomLeft.bottomLeft.piece -and $down) {
+        #     $options += [PSCustomObject]@{square = $this.square.bottomLeft.bottomLeft; piece = $this.square.bottomLeft.piece } 
+        # }
+        # if ($this.square.bottomRight.piece -and $this.square.bottomRight.piece.team -ne $this.team -and !$this.square.bottomRight.bottomRight.piece -and $down) {
+        #     $options += [PSCustomObject]@{square = $this.square.bottomRight.bottomRight; piece = $this.square.bottomRight.piece }
+        # }
+
+        $options += $this.square.getMoves($this)
 
         # if direction is not null & not direction piece & can move up/down
-        if ($null -ne $this.square.topLeft -and !$this.square.topLeft.piece -and $up) {
-            $options += [PSCustomObject]@{square = $this.square.topLeft; piece = $null }
-        }
-        if ($null -ne $this.square.topRight -and !$this.square.topRight.piece -and $up) {
-            $options += [PSCustomObject]@{square = $this.square.topRight; piece = $null }
-        }
-        if ($null -ne $this.square.bottomLeft -and !$this.square.bottomLeft.piece -and $down) {
-            $options += [PSCustomObject]@{square = $this.square.bottomLeft; piece = $null }
-        }
-        if ($null -ne $this.square.bottomRight -and !$this.square.bottomRight.piece -and $down) {
-            $options += [PSCustomObject]@{square = $this.square.bottomRight; piece = $null }
-        }
+        # if ($null -ne $this.square.topLeft -and !$this.square.topLeft.piece -and $up) {
+        #     $options += [PSCustomObject]@{square = $this.square.topLeft; piece = $null }
+        # }
+        # if ($null -ne $this.square.topRight -and !$this.square.topRight.piece -and $up) {
+        #     $options += [PSCustomObject]@{square = $this.square.topRight; piece = $null }
+        # }
+        # if ($null -ne $this.square.bottomLeft -and !$this.square.bottomLeft.piece -and $down) {
+        #     $options += [PSCustomObject]@{square = $this.square.bottomLeft; piece = $null }
+        # }
+        # if ($null -ne $this.square.bottomRight -and !$this.square.bottomRight.piece -and $down) {
+        #     $options += [PSCustomObject]@{square = $this.square.bottomRight; piece = $null }
+        # }
 
         return $options
     }
@@ -120,11 +124,15 @@ class piece {
     }
 
     [string] getDetails() {
-        $options = $this.getOptions().square.position
-        $k = & { if ($this.king) { 'King ' }else { 'Piece' } }
-        $position = & { if ($this.onboard()){$this.square.position}else{'   '} }
+        $options = $this.getOptions()
 
-        return "$($this.team) $($position) $k ($options)"
+        $opts = $options.square.position
+        $k = & { if ($this.king) { 'King ' }else { 'Piece' } }
+        $position = & { if ($this.onboard()) { $this.square.position }else { '   ' } }
+
+        $nextMoves = $options.nextMove.square.position
+
+        return "$($this.team) $($position) $k ($opts) [$nextMoves]"
     }
 }
 
@@ -182,6 +190,48 @@ class square {
         write-host "TopRight:    $($this.topRight.position)"
         write-host "BottomLeft:  $($this.bottomLeft.position)"
         write-host "BottomRight: $($this.bottomRight.position)"
+    }
+
+    [object[]] getJumps([piece] $piece) {
+        # write-host $piece.id $piece.team
+        $directions = @()
+
+        if ($piece.team -eq 0 -or $piece.king) { $directions += @('bottomLeft', 'bottomRight') }
+        if ($piece.team -eq 1 -or $piece.king) { $directions += @('topLeft', 'topRight') }
+
+        # write-host $this.position $directions
+
+        $options = @()
+        
+        $directions | foreach-object {
+            if ($this.$_.piece -and $this.$_.piece.team -ne $piece.team -and !$this.$_.$_.piece) {
+                if($this.$_.$_){
+                    # write-host "recursing to $_ $($this.$_.$_.position)"
+                    $options += [PSCustomObject]@{square = $this.$_.$_; piece = $this.$_.piece; nextMove = $this.$_.$_.getJumps($piece) }
+                }else{
+                    $options += [PSCustomObject]@{square = $this.$_.$_; piece = $this.$_.piece; nextMove = $null }
+                }
+            }
+        }
+
+        return $options
+    }
+
+    [object[]] getMoves([piece] $piece) {
+        $directions = @()
+
+        if ($piece.team -eq 0 -or $piece.king) { $directions += @('bottomLeft', 'bottomRight') }
+        if ($piece.team -eq 1 -or $piece.king) { $directions += @('topLeft', 'topRight') }
+
+        $options = @()
+
+        $directions | foreach-object {
+            if ($this.$_ -and !$this.$_.piece) {
+                $options += [PSCustomObject]@{square = $this.$_; piece = $null; nextMove = $null }
+            }
+        }
+
+        return $options
     }
 
 }
@@ -272,6 +322,26 @@ class player {
     }
 }
 
+class move {
+    [player] $player
+    [piece] $piece
+    [string] $from
+    [string] $to
+
+    move (
+        [player] $player,
+        [piece] $piece,
+        [string] $from,
+        [string] $to
+    ) {
+        $this.player = $player
+        $this.piece = $piece
+        $this.from = $from
+        $this.to = $to
+    }
+
+}
+
 class board {
     hidden [square] $primary
     hidden [piece[]] $pieces
@@ -353,19 +423,31 @@ class board {
 
         if ($position) {
             $piece = $this.getPiece($position)
-            $options = $piece.getOptions().square.position
+            $pieceOptions = $piece.getOptions()
 
-            if ($options) {
-                if ($options.getType().Name -eq 'String') {
-                    $options = @($options, $position)
-                }
-                else {
-                    $options += $position
-                }
+            $options = @()
+
+            $options += $pieceOptions.square.position
+            $options += $position
+
+            $nextMove = $pieceOptions.nextMove
+            while($nextMove) {
+                write-host 'there is a next move'
+                $options += $nextMove.square.position
+                $nextMove = $nextMove.nextMove
             }
-            else {
-                $options = @($position)
-            }
+
+            # if ($options) {
+            #     if ($options.getType().Name -eq 'String') {
+            #         $options = @($options, $position)
+            #     }
+            #     else {
+            #         $options += $position
+            #     }
+            # }
+            # else {
+            #     $options = @($position)
+            # }
 
 
         }
@@ -468,11 +550,11 @@ class board {
     }
 
     [boolean] movePiece([string]$from, [string] $to) {
-        write-host
+        # write-host
         $movePiece = $this.getPiece($from).move($to)
-        if ($movePiece) { write-host 'Move Successful' }
-        else { write-host 'Invalid Move' }
-        start-sleep 1
+        # if ($movePiece) { write-host 'Move Successful' }
+        # else { write-host 'Invalid Move' }
+        # start-sleep 1
         return $movePiece
     }
 
@@ -529,6 +611,13 @@ class board {
     [void] playGameLocalArrows() {
         $currentPlayer = $this.player0
 
+        $this.movePiece('1.1', '2.2')
+        $this.movePiece('2.2', '3.3')
+        $this.movePiece('6.2', '5.3')
+        $this.movePiece('5.3', '4.4')
+        $this.movePiece('6.6', '5.7')
+        $this.movePiece('7.7', '6.6')
+
         while ($this.player0.discardedPieces() -lt 8 -or $this.player1.discardedPieces() -lt 8) {
             $currentPlayer.turns += 1
             $currentPlayerPieces = $currentPlayer.activePieces()  | sort-object { [int]$_.square.position }
@@ -567,7 +656,6 @@ class board {
                 out-log "  $moves KeyInput = $($keyInput.virtualkeycode)"
 
                 # next - w (87) and d (68) and -> (39) and ^ (38)
-                
                 if ($keyInput -in (87, 68, 39, 38)) {
                     if (!$currentPieceOptions) {
                         if ($currentPiece + 1 -eq $currentPlayerPieces.count) { $currentPiece = 0 }
@@ -613,7 +701,7 @@ class board {
                 elseif ($keyInput -eq 69) {
                     write-host "`r`nAre you sure you want to exit? (y/n)" -NoNewline
                     $keyInput = ($this.host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp")).virtualkeycode
-                    if ($keyinput -eq 89) { exit }
+                    if ($keyinput -eq 89) { write-host; exit }
                 }
             }
 
