@@ -18,7 +18,7 @@ class piece {
     [int]$team
     [square]$square
     [boolean]$king
-    [int]$moves
+    [int]$numMoves
 
     piece(
         [int]$team,
@@ -30,12 +30,20 @@ class piece {
         $this.id = $pieceID
         
         $this.king = $false
-        $this.moves = 0
+        $this.numMoves = 0
     }
 
     [boolean] onBoard() {
         if ($this.square) { return $true }
         else { return $false }
+    }
+
+    [move[]] getMoves() {
+        $moves = @()
+
+
+
+        return $moves
     }
 
     [object[]] getOptions() {
@@ -105,7 +113,7 @@ class piece {
                 $this.king = $true
             }
 
-            $this.moves++
+            $this.numMoves++
             return $true
         }
         else {
@@ -205,10 +213,11 @@ class square {
         
         $directions | foreach-object {
             if ($this.$_.piece -and $this.$_.piece.team -ne $piece.team -and !$this.$_.$_.piece) {
-                if($this.$_.$_){
+                if ($this.$_.$_) {
                     # write-host "recursing to $_ $($this.$_.$_.position)"
                     $options += [PSCustomObject]@{square = $this.$_.$_; piece = $this.$_.piece; nextMove = $this.$_.$_.getJumps($piece) }
-                }else{
+                }
+                else {
                     $options += [PSCustomObject]@{square = $this.$_.$_; piece = $this.$_.piece; nextMove = $null }
                 }
             }
@@ -232,6 +241,22 @@ class square {
         }
 
         return $options
+    }
+
+    [move[]] getMoves2([piece] $piece) {
+        $directions = @()
+        if ($piece.team -eq 0 -or $piece.king) { $directions += @('bottomLeft', 'bottomRight') }
+        if ($piece.team -eq 1 -or $piece.king) { $directions += @('topLeft', 'topRight') }
+
+        $moves = @()
+
+        $directions | foreach-object {
+            if ($this.$_ -and !$this.$_.piece) {
+                $moves += [move]::new($piece, $this, $this.$_, $null)
+            }
+        }
+
+        return $moves
     }
 
 }
@@ -269,77 +294,52 @@ class player {
     [piece] getPiece([string] $position) {
         return $this.pieces | where-object { $_.square.position -eq $position }
     }
-
-    [boolean] movePiece([string]$from, [string] $to) {
-        if ($this.getPiece($from)) {
-            write-host
-            $movePiece = $this.getPiece($from).move($to)
-            # if ($movePiece) { write-host 'Move Successful' }
-            # else { write-host 'Invalid Move' }
-            # start-sleep 1
-            return $movePiece
-        }
-        else {
-            write-host 'Invalid Move'
-            start-sleep 1
-            return $false
-        }
-    }
-
-    [void] print() {
-        # clear-host
-        $counter = 0
-        write-host "   0  1  2  3  4  5  6  7"
-        $this.board.toRows() | foreach-object {
-            write-host "$counter " -NoNewline
-            $counter++
-            $activePieces = $this.activePieces()
-            if ([math]::floor($_[0].id / 4) % 2 -eq 0) {
-                foreach ($sq in $_) {
-                    if ($sq.piece -and $sq.piece -in $activePieces) { $color = 'cyan' }
-                    else { $color = 'black' }
-
-                    write-host " $($sq.output()) " -BackgroundColor red -ForegroundColor $color -NoNewline
-                    write-host '   ' -NoNewline
-                }
-            }
-            else {
-                foreach ($sq in $_) {
-                    if ($sq.piece -and $sq.piece -in $activePieces) { $color = 'cyan' }
-                    else { $color = 'black' }
-
-                    write-host '   ' -NoNewline
-                    write-host " $($sq.output()) " -BackgroundColor red -ForegroundColor $color -NoNewline
-                }
-            }
-            write-host
-        }
-
-        $team0 = "$('○' * $this.board.player0.discardedPieces())$(' ' * (8-$this.board.player0.discardedPieces()))"
-        $team1 = "$(' ' * (8-$this.board.player1.discardedPieces()))$('●' * $this.board.player1.discardedPieces())"
-
-        write-host "  $team0        $team1"
-    }
 }
 
 class move {
     [player] $player
     [piece] $piece
-    [string] $from
-    [string] $to
+    [piece] $jumpedPiece
+    [square] $from
+    [square] $to
+    [move]$previous
+    [move]$next
 
     move (
         [player] $player,
         [piece] $piece,
-        [string] $from,
-        [string] $to
+        [square] $from,
+        [square] $to,
+        [move] $previous
     ) {
-        $this.player = $player
+        if (!($null -eq $player)) {
+            $this.player = $player
+            $this.piece = $piece
+            $this.from = $from
+            $this.to = $to
+            $this.previous = $previous
+        }
+    }
+
+    move (
+        [piece] $piece, 
+        [square] $from, 
+        [square] $to, 
+        [piece] $jumpedPiece
+    ) {
         $this.piece = $piece
         $this.from = $from
         $this.to = $to
+        $this.jumpedPiece = $jumpedPiece
     }
 
+    [string] getSentence() {
+        return "Player $($this.piece.team) moved Piece $($this.piece.id) from $($this.from) to $($this.to)"
+    }
+
+    [void] printDetails() {
+        write-host $this.getSentence()
+    }
 }
 
 class board {
@@ -347,6 +347,8 @@ class board {
     hidden [piece[]] $pieces
     hidden [player] $player0
     hidden [player] $player1
+    [move] $firstMove #= [move]::new($null, $null, $null, $null, $null)
+    hidden [move] $lastMove
     hidden $host
 
     board($hostValue) {
@@ -357,6 +359,9 @@ class board {
 
         $this.player0.otherPlayer = $this.player1
         $this.player1.otherPLayer = $this.player0
+
+        $this.firstMove = [move]::new($null, $null, $null, $null, $null)
+        $this.lastMove = $this.firstMove
 
         $this.pieces = @()
 
@@ -431,7 +436,7 @@ class board {
             $options += $position
 
             $nextMove = $pieceOptions.nextMove
-            while($nextMove) {
+            while ($nextMove) {
                 write-host 'there is a next move'
                 $options += $nextMove.square.position
                 $nextMove = $nextMove.nextMove
@@ -533,6 +538,18 @@ class board {
 
     }
 
+    [move[]] getMoves() {
+        $moves = @()
+
+        $currentMove = $this.firstMove.next
+        while ($currentMove) {
+            $moves += $currentMove
+            $currentMove = $currentMove.next
+        }
+
+        return $moves
+    }
+
     [square] getSquare([int] $id) {
         return $this.toList() | where-object { $_.id -eq $id }
     }
@@ -542,7 +559,7 @@ class board {
     }
 
     [piece] getPiece([int] $id) {
-        return $this.pieces[$id]
+        return $this.pieces | where-object { $_.id = $id }
     }
 
     [piece] getPiece([string] $position) {
@@ -550,11 +567,17 @@ class board {
     }
 
     [boolean] movePiece([string]$from, [string] $to) {
-        # write-host
-        $movePiece = $this.getPiece($from).move($to)
-        # if ($movePiece) { write-host 'Move Successful' }
-        # else { write-host 'Invalid Move' }
-        # start-sleep 1
+        $piece = $this.getPiece($from)
+
+        $movePiece = $piece.move($to)
+        
+        $player = "player$($piece.team)"
+
+        $currentMove = $this.lastMove
+        $currentMove.next = [move]::new($this.$player, $piece, $from, $to, $currentMove)
+        $currentMove.next.previous = $currentMove
+        $this.lastMove = $currentMove.next
+        
         return $movePiece
     }
 
@@ -685,7 +708,7 @@ class board {
                         $currentPieceOption = 0
                     }
                     else {
-                        $status = $currentPlayer.movePiece($currentPlayerPieces[$currentPiece].square.position, $currentPieceOptions[$currentPieceOption].square.position)
+                        $status = $this.movePiece($currentPlayerPieces[$currentPiece].square.position, $currentPieceOptions[$currentPieceOption].square.position)
                         if ($status) {
                             $turnLooper = $false
                         }
